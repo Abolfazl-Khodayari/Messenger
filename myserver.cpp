@@ -2,7 +2,7 @@
 #include <vector>
 #include <sys/socket.h>
 #include <netinet/in.h>
-//#include <threads.h>
+#include <threads.h>
 #include <thread>
 #include <unistd.h>
 #include <mutex>
@@ -65,10 +65,10 @@ public:
     mutex server_mutex;
     mutex client_mutex;
     mutex print_mutex;
-    Server(int theport){
+    Server(int _port){
         id_numbers = 0;
         max_length = 150;
-        port = theport;
+        port = _port;
     }   
     //void start_listening();
     //void start_accepting();
@@ -86,7 +86,7 @@ public:
     void start_listening(){
         struct sockaddr_in server;
         server.sin_family = AF_INET;
-        server.sin_port = htons(9911);
+        server.sin_port = htons(port);
         server.sin_addr.s_addr = INADDR_ANY;
         if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1){
             perror("we fucked up: socket");
@@ -155,8 +155,8 @@ public:
                 continue;
             }
             user_server->name = the_name;
-            send_message(user_server->client_socket, "Wellcome " + string(the_name));
-            multi_print("Wellcome " + string(the_name));
+            send_message(user_server->client_socket, "Chatroom -> Wellcome " + string(the_name));
+            multi_print("Chatroom -> Wellcome " + string(the_name));
             return true;
         }   
 
@@ -239,7 +239,7 @@ public:
 
 
 int main(){
-    cout << "---starting---\n";
+    cout << "---Server-starting---\n";
     Server myserver(10001);
     myserver.start_listening();
     myserver.start_accepting();
