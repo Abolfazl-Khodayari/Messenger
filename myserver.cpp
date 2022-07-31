@@ -2,14 +2,23 @@
 #include <vector>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <threads.h>
+//#include <threads.h>
 #include <thread>
 #include <unistd.h>
 #include <mutex>
 #include <map>
 
 using namespace std;
-
+vector<string>* split_message(string the_message, string spliter, int start_position){
+    vector<string>* message = new vector<string>;
+    int end_position;
+    while((end_position = the_message.find(spliter, start_position)) != string::npos){ // idn string::npos
+        message->push_back(the_message.substr(start_position, end_position-start_position));
+        start_position = end_position + spliter.length();
+    }
+    message->push_back(the_message.substr(start_position));
+    return message;
+}
 class User_server{
 public:
     int id;
@@ -30,6 +39,7 @@ public:
         }
         if (client_socket){
             close(client_socket);
+        }
     }
 };
 class User{
@@ -42,10 +52,6 @@ public:
         password = the_password;
         user_server = the_user_server;
     }   
-
-
-
-
 };
 
 class Server{
@@ -55,6 +61,7 @@ public:
     int server_socket;
     int port;
     map<string, User*> users_list;
+    map<int, User_server*> clients_list;
     mutex server_mutex;
     mutex client_mutex;
     mutex print_mutex;
@@ -63,13 +70,18 @@ public:
         max_length = 150;
         port = theport;
     }   
-    void start_listening();
-    void start_accepting();
-    void multi_print(string);
-    void handle_client(Server*, User_server*);
-    bool login_client(User_server*);
-    bool find_or_creat_user(User_server*, string, string);
-    void send_message(int, string);
+    //void start_listening();
+    //void start_accepting();
+    //void multi_print(string);
+    // void handle_client(Server*, User_server*);
+    //bool login_client(User_server*);
+    //bool find_or_creat_user(User_server*, string, string);
+    //void send_message(int, string);
+    //void process_message(User*, string);
+    //void check_user_status(string, bool);
+    //void send_pv(User_server*, User_server*, string);
+    //void add_client(User_server*);
+    //void terminate_connection(int)
 
     void start_listening(){
         struct sockaddr_in server;
@@ -101,7 +113,9 @@ public:
             }
             id_numbers++;
             User_server* user_server = new User_server(id_numbers, client_socket);
-            thread* client_thread = new thread(handle_client, this, user_server);
+            thread* client_thread = new thread( handle_client ,this, user_server);
+            user_server->client_thread = client_thread;
+            add_client(user_server);
         }
     }
     void multi_print(string str){
@@ -147,8 +161,52 @@ public:
         }   
 
     }
-    void handle_client(Server* the_server, User_server* the_user_server){
-        if(login_client(the_user_server)){
+    void check_user_status(string name, bool online_status){
+        if (users_list.find(name) == users_list.end()){
+            throw "User not found";
+        }
+        if(online_status && !users_list[name]->user_server){
+            throw "User is offline";
+        }
+    }
+    void send_pv(User_server* sender, User_server* receiver, string message){
+        send_message(receiver->client_socket, "PV | " + sender->name + " : " + message);
+        send_message(sender->client_socket, "Server | From you to " + receiver->name + " : " + message);
+    }
+    void process_message(User* user, string message){
+        vector<string>* splited_message = 0;
+        try{
+            splited_message = split_message(message, " #", 1);
+            if (splited_message->size() == 0 || (splited_message->size() != -1)){
+                throw "The message format is incorrect";
+            }
+            if (splited_message->at(0) == "pv"){
+                if (splited_message->size() == 0){
+                    throw "The message format is incorrect";
+                } 
+                check_user_status(splited_message->at(1), true);
+                send_pv(user->user_server, users_list[splited_message->at(1)]->user_server, splited_message->at(2)); 
+            }
+            else{
+                throw "The command is not executable";
+            }
+        }
+        catch(const char* error_message){
+            send_message(user->user_server->client_socket, "Server | we fucked up: " + string(error_message));
+        }
+        if (splited_message){
+            splited_message->clear();
+            delete splited_message;
+        }
+    }
+    void terminate_connection(int id){
+        lock_guard<mutex> guard(client_mutex);
+        if (clients_list[id]){
+            delete clients_list[id];
+        }
+    }
+    static void handle_client(Server* the_server, User_server* the_user_server){
+        if(the_server->login_client(the_user_server)){
             char message1[the_server->max_length];
             int bytes_received;
             while (1){
@@ -157,14 +215,19 @@ public:
                     break;
                 }
                 the_server->multi_print(the_user_server->name + " : " + message1);
-                
+                the_server->process_message(the_server->users_list[the_user_server->name], message1);
             }
+            the_server->users_list[the_user_server->name]->user_server = 0;
         }
+        the_server->terminate_connection(the_user_server->id);
     }
     void send_message(int client_socket, string message){
         send(client_socket, &message[0], max_length, 0);
     }
-    
+    void add_client(User_server* user_server){
+        lock_guard<mutex> guard(client_mutex);
+	    clients_list[user_server->id] = user_server;
+    }
 };
 
 
@@ -179,6 +242,7 @@ int main(){
     cout << "---starting---\n";
     Server myserver(10001);
     myserver.start_listening();
+    myserver.start_accepting();
 
 
     
