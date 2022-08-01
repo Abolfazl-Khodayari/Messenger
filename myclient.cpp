@@ -31,8 +31,9 @@ public:
     //void login();
     //void multi_print(string, bool);
     //void start_chatting();
-    //void send_handler (Client*);
-    //void receive_handler (Client*);
+    //static void send_handler (Client*);
+    //static void receive_handler (Client*);
+    //void terminate_connection();
 
     Client(int _port){
         max_length = 150;
@@ -77,7 +78,7 @@ public:
             }
         }
     }
-    void multi_print(string message, bool you){ //idk
+    void multi_print(string message, bool you = true){ //idk
         lock_guard<mutex> guard(print_mutex);
         if (message.length()){
             cout<<"\33[2K \r"<<message<<endl;
@@ -86,7 +87,7 @@ public:
             cout<<"\33[2K \r"<<"You : ";
         }
     }
-    void send_handler (Client* myclient){
+    static void send_handler (Client* myclient){
         while(1){
             char string1[myclient->max_length];
             cin.getline(string1, myclient->max_length);
@@ -99,24 +100,50 @@ public:
             send(myclient->client_socket, string1, sizeof(string1), 0);
         }
     }
-    void receive_handler (Client* myclient){
+    static void receive_handler (Client* myclient){
         while(!myclient->exited){
             char message[myclient->max_length];
             int bytes_received = recv(myclient->client_socket, message, sizeof(message), 0);
             if (bytes_received <= 0){
                 continue;
             }
-            
-
-
-
+            myclient->multi_print(message);
+            fflush(stdout);
         }   
     }
     void start_chatting(){
         send_thread = new thread(send_handler, this);
         receive_thread = new thread(receive_handler, this);
+        if(send_thread->joinable()){
+            send_thread->join();
+        }
+        if (receive_thread->joinable()){
+            receive_thread->join();
+        }
     }
-
+    void terminate_connection(){
+        if (send_thread){
+            if (send_thread->joinable()){
+                send_thread->detach();
+                delete send_thread;
+            }
+            send_thread = 0;
+        }
+        if (receive_thread){
+            if (receive_thread->joinable()){
+                receive_thread->detach();
+                delete receive_thread;
+            }
+            receive_thread = 0;
+        }
+        close(client_socket);
+        multi_print("--socket turned off--", false);
+    }
+    ~Client(){
+        terminate_connection();
+        delete [] password;
+        delete [] name;
+    }
 };
 
 Client* myclient;
