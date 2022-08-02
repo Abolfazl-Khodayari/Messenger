@@ -288,8 +288,8 @@ public:
                 continue;
             }
             user_server->name = the_name;
-            send_message(user_server->client_socket, "Server |  Wellcome " + string(the_name));
-            multi_print("Server |  Wellcome " + string(the_name));
+            send_message(user_server->client_socket, "Server | Wellcome " + string(the_name));
+            multi_print("Server | Wellcome " + string(the_name));
             return true;
         }   
 

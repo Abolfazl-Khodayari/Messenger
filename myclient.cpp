@@ -22,9 +22,12 @@ public:
     char* name;
     char* password;
     char* username;
+    char* temp_password;
     int port;
     mutex print_mutex;
     int client_socket;
+    char* choose;
+    string temp_choose;
 
     //client();
     //void start_connection();
@@ -41,6 +44,8 @@ public:
         exited = false;
         name = new char[max_length];
         password = new char[max_length];
+        temp_password = new char[max_length];
+        choose = new char[1];
         port = _port;
     }
     void start_connection(){
@@ -59,21 +64,48 @@ public:
     }
     void login(){
         while(1){
-            cout << "client | Welcome to SINA chatroom" << endl;
-            cout << "client | Enter your name:\n";
-            cin.getline(name, max_length);
-            cout << "Enter your password:\n";
-            cin.getline(password, max_length);
-            send(client_socket, name, sizeof(name), 0);
-            send(client_socket, password, sizeof(password), 0);
-            multi_print("client | Fill captcha :)" , false);
+            menu(1);
+            if (choose[0] == '1'){
+                while (1){
+                    cout << "Enter your name:" << endl;
+                    cin.getline(name, max_length);
+                    cout << "Enter your password:" << endl;
+                    cin.getline(password, max_length);
+                    cout << "Enter your password again:" << endl;
+                    cin.getline(temp_password, max_length);
+                    if (!(equal(password, password + sizeof password / sizeof *password, temp_password))){
+                        cout << "Password mismatch. Try again:" << endl;
+                        continue;
+                    }
+                    else{
+                        send(client_socket, name, max_length, 0);
+                        send(client_socket, password, max_length, 0);
+                        break;
+                    }
+                }
+            }
+            else{
+                cout << "Enter your name:" << endl;
+                cin.getline(name, max_length);
+                cout << "Enter your password:" << endl;
+                cin.getline(password, max_length);
+                send(client_socket, name, max_length, 0);
+                send(client_socket, password, max_length, 0);
+            }
+            multi_print("waiting :)" , false);
             char server_response[max_length];
             int bytes_received = recv(client_socket, server_response, sizeof(server_response), 0);
             if (bytes_received <= 0){
                 continue;
             }
-            multi_print(server_response, false);
-            if (string(server_response) == "Server |  Wellcome " + string(name)){
+            if (string(server_response) == "Wrong UserName or Password " + string(name) and choose[0] == '1'){
+                multi_print("This username is already token", false);
+            } 
+            if (string(server_response) == "Wrong UserName or Password " + string(name) and choose[0] != '1'){
+                multi_print(server_response, false);
+            }
+            if (string(server_response) == "Server | Wellcome " + string(name)){
+                multi_print(server_response, false);
                 break;
             }
         }
@@ -140,6 +172,18 @@ public:
         close(client_socket);
         multi_print("--socket turned off--", false);
     }
+    void menu(int stage){
+        if(stage == 1){
+            cout << "1. Creat an account\n" << "2. Sing in:" << endl;
+            cout << "Write down your option number: \"2\" for Sing in" << endl;
+            cin.getline(choose, 2);
+        }
+        if(stage == 2){
+            cout << "1. change name\n" << "2. show groups\n" << "3. friends\n"<< "4. blocked\n"<< "5. exit"<< endl;
+            cin.getline(choose, 2);
+        }
+        //return choose;
+    }
     ~Client(){
         terminate_connection();
         delete [] password;
@@ -157,7 +201,7 @@ void exit_app(int sig_num){
 
 
 int main(){
-    cout << "---Server-starting---\n";
+    cout << "---Cilent-starting---\n";
     myclient = new Client(10002);
     signal(SIGINT, exit_app); // ink
     myclient->start_connection();
