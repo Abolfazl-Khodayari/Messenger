@@ -45,7 +45,7 @@ public:
     }
     void start_connection(){
         if((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1){
-            perror("we fucked up: client socket; ");
+            perror("client | we fucked up: client socket; ");
             exit(1);
         }
         struct sockaddr_in client;
@@ -53,27 +53,27 @@ public:
 	    client.sin_port=htons(port);
 	    client.sin_addr.s_addr=INADDR_ANY;
         if((connect(client_socket, (struct sockaddr *)&client, sizeof(struct sockaddr_in))) == -1){ // idk
-            perror("we fucked up: client connect; ");
+            perror("client | we fucked up: client connect; ");
             exit(1);
         }
     }
     void login(){
         while(1){
-            cout << "Welcome to SINA chatroom" << endl;
-            cout << "enter your name" << endl;
+            cout << "client | Welcome to SINA chatroom" << endl;
+            cout << "client | Enter your name:\n";
             cin.getline(name, max_length);
-            cout << "enter your password" << endl;
+            cout << "Enter your password:\n";
             cin.getline(password, max_length);
             send(client_socket, name, sizeof(name), 0);
             send(client_socket, password, sizeof(password), 0);
-            multi_print("Fill captcha :\\" , false);
+            multi_print("client | Fill captcha :)" , false);
             char server_response[max_length];
             int bytes_received = recv(client_socket, server_response, sizeof(server_response), 0);
             if (bytes_received <= 0){
                 continue;
             }
             multi_print(server_response, false);
-            if (string(server_response) == "Server | welcome " + string(name)){
+            if (string(server_response) == "Server |  Wellcome " + string(name)){
                 break;
             }
         }
@@ -84,11 +84,12 @@ public:
             cout<<"\33[2K \r"<<message<<endl;
         }
         if (you){
-            cout<<"\33[2K \r"<<"You : ";
+            cout<<"\33[2K \r"<<"Type a message: ";
         }
     }
     static void send_handler (Client* myclient){
         while(1){
+            myclient->multi_print("");
             char string1[myclient->max_length];
             cin.getline(string1, myclient->max_length);
             if(string(string1) == "#exit"){
@@ -146,27 +147,21 @@ public:
     }
 };
 
-Client* myclient;
+Client* myclient = 0;
 void exit_app(int sig_num){
     if (myclient)
         delete myclient;
-    cout<<"...bye..."<<endl;
+    cout<<"\n---bye---"<<endl;
     exit(sig_num);
 }
 
 
 int main(){
     cout << "---Server-starting---\n";
-    myclient = new Client(10001);
+    myclient = new Client(10002);
     signal(SIGINT, exit_app); // ink
     myclient->start_connection();
     myclient->login();
     myclient->start_chatting();
-
-
-
-
-
-    
     return 0;
 }

@@ -7,8 +7,11 @@
 #include <unistd.h>
 #include <mutex>
 #include <map>
+#include <fstream>
+#include <signal.h>
 
 using namespace std;
+
 vector<string>* split_message(string the_message, string spliter, int start_position){
     vector<string>* message = new vector<string>;
     int end_position;
@@ -19,6 +22,7 @@ vector<string>* split_message(string the_message, string spliter, int start_posi
     message->push_back(the_message.substr(start_position));
     return message;
 }
+
 class User_server{
 public:
     int id;
@@ -54,6 +58,121 @@ public:
     }   
 };
 
+
+class Users_list_file{
+public:
+    fstream file;
+    string file_address;
+    string spliter;
+    mutex write_mtx;
+    bool first = true;
+    Users_list_file(string address, string split){
+        spliter = split;
+        file_address = address;
+    }
+    void add_user(User* user){
+        lock_guard<mutex> guard(write_mtx);
+        if(!file){
+            cout << "file not opened\n";
+        }
+        if(first){
+            file.open(file_address, ios::out);
+            file.close();
+            first = false;
+        }
+        file.open(file_address, ios::app);
+        if(!file){
+            cout << "file not opened\n";
+        }
+        string newline = user->name + spliter + user->password + "\n";
+        file << newline;
+        file.close();
+    }
+    vector<User*>* get_users(){
+        vector<User*>* users_list = new vector<User*>;
+        lock_guard<mutex> guard(write_mtx);
+        file.open(file_address, ios::in);
+        string line;
+        vector<string>* messages;
+        while(!file.eof()){
+            getline(file, line);
+            if(line.length() <= 0){
+                continue;
+            }
+            messages = split_message(line, spliter, 0);
+            users_list->push_back(new User(messages->at(0), messages->at(1)));
+        }
+        file.close();
+        return users_list;
+    }
+
+};
+
+class Groups_list_file{
+public:
+    fstream file;
+    string file_address;
+    string spliter;
+    mutex write_mtx;
+    Groups_list_file(string address, string split){
+        spliter = split;
+        file_address = address;
+    }
+
+};
+
+class Pv_messages_file{
+public:
+    fstream file;
+    string file_address;
+    string spliter;
+    mutex write_mtx;
+    Pv_messages_file(string address, string split){
+        spliter = split;
+        file_address = address;
+    }
+
+};
+
+class Group_messages_file{
+public:
+    fstream file;
+    string file_address;
+    string spliter;
+    mutex write_mtx;
+    Group_messages_file(string address, string split){
+        spliter = split;
+        file_address = address;
+    }
+
+};
+
+class Buffer_messages_file{
+public:
+    fstream file;
+    string file_address;
+    string spliter;
+    mutex write_mtx;
+    Buffer_messages_file(string address, string split){
+        spliter = split;
+        file_address = address;
+    }
+
+};
+
+class Block_list_file{
+public:
+    fstream file;
+    string file_address;
+    string spliter;
+    mutex write_mtx;
+    Block_list_file(string address, string split){
+        spliter = split;
+        file_address = address;
+    }
+
+};
+
 class Server{
 public:
     int id_numbers;
@@ -65,10 +184,23 @@ public:
     mutex server_mutex;
     mutex client_mutex;
     mutex print_mutex;
+    Users_list_file* users_list_file;
+    Groups_list_file* groups_list_file;
+    Pv_messages_file* pv_messages_file;
+    Group_messages_file* groups_messages_file;
+    Buffer_messages_file* buffer_messages_file;
+    Block_list_file* block_list_file;
+
     Server(int _port){
         id_numbers = 0;
         max_length = 150;
         port = _port;
+        users_list_file = new Users_list_file("database/users_list_file.txt", "#!#");
+        // groups_list_file = new Groups_list_file;
+        // pv_messages_file = new Pv_messages_file;
+        // groups_messages_file = new Groups_messages_file;
+        // buffer_messages_file = new buffer_messages_file;
+        
     }   
     //void start_listening();
     //void start_accepting();
@@ -89,18 +221,18 @@ public:
         server.sin_port = htons(port);
         server.sin_addr.s_addr = INADDR_ANY;
         if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1){
-            perror("we fucked up: socket");
+            perror("Server | we fucked up: socket");
             exit(-1);
 	    }
         if ((bind(server_socket, (struct sockaddr *)&server, sizeof(struct sockaddr_in))) == -1){
-            perror("we fucked up: bind");
+            perror("Server | we fucked up: bind");
             exit(-1);
 	    }
         if ((listen(server_socket, 5)) == -1){
-            perror("we fucked up: listen");
+            perror("Server | we fucked up: listen");
             exit(-1);
         }
-        multi_print("--Server start listening--");
+        multi_print("--Server | Server start listening--");
     }
     void start_accepting(){
         struct sockaddr_in client;
@@ -108,12 +240,12 @@ public:
         unsigned int len = sizeof(sockaddr_in);
         while (true){
             if ((client_socket = accept(server_socket, (struct sockaddr *)&client, &len)) == -1){
-                perror("we fucked up: accept");
+                perror("Server | we fucked up: accept");
                 exit(-1);
             }
             id_numbers++;
             User_server* user_server = new User_server(id_numbers, client_socket);
-            thread* client_thread = new thread( handle_client ,this, user_server);
+            thread* client_thread = new thread(handle_client ,this, user_server);
             user_server->client_thread = client_thread;
             add_client(user_server);
         }
@@ -133,6 +265,7 @@ public:
         }
         else{
             users_list[name] = new User(name, password, user_server);
+            users_list_file->add_user(users_list[name]);
         }
         return true;
     }
@@ -149,24 +282,24 @@ public:
             if(byte_received <= 0){
                 return false;
             }
-            if(find_or_creat_user(the_name, the_password, user_server)){
+            if(!find_or_creat_user(the_name, the_password, user_server)){
                 send_message(user_server->client_socket, "Wrong UserName or Password " + string(the_name));
-                multi_print("Wrong UserName or Password " + string(the_name));
+                multi_print("Server | Wrong UserName or Password " + string(the_name));
                 continue;
             }
             user_server->name = the_name;
-            send_message(user_server->client_socket, "Chatroom -> Wellcome " + string(the_name));
-            multi_print("Chatroom -> Wellcome " + string(the_name));
+            send_message(user_server->client_socket, "Server |  Wellcome " + string(the_name));
+            multi_print("Server |  Wellcome " + string(the_name));
             return true;
         }   
 
     }
     void check_user_status(string name, bool online_status){
         if (users_list.find(name) == users_list.end()){
-            throw "User not found";
+            throw "Server | User not found";
         }
         if(online_status && !users_list[name]->user_server){
-            throw "User is offline";
+            throw "Server | User is offline";
         }
     }
     void send_pv(User_server* sender, User_server* receiver, string message){
@@ -177,18 +310,14 @@ public:
         vector<string>* splited_message = 0;
         try{
             splited_message = split_message(message, " #", 1);
-            if (splited_message->size() == 0 || (splited_message->size() != -1)){
-                throw "The message format is incorrect";
-            }
+            check_message_size(splited_message);
             if (splited_message->at(0) == "pv"){
-                if (splited_message->size() == 0){
-                    throw "The message format is incorrect";
-                } 
+                check_message_size(splited_message, 3);
                 check_user_status(splited_message->at(1), true);
                 send_pv(user->user_server, users_list[splited_message->at(1)]->user_server, splited_message->at(2)); 
             }
             else{
-                throw "The command is not executable";
+                throw "the command is not executable";
             }
         }
         catch(const char* error_message){
@@ -228,6 +357,26 @@ public:
         lock_guard<mutex> guard(client_mutex);
 	    clients_list[user_server->id] = user_server;
     }
+    void check_message_size(vector<string>* message_splitted, int i = -1){
+        if (message_splitted->size() == 0 || (i != -1 && message_splitted->size() != i)){
+            throw "The message format is incorrect";
+        }
+    }
+    void delete_users(){
+        for (auto & u : clients_list){
+            delete u.second;
+        }
+        clients_list.clear();
+        for (auto & u : users_list){
+            delete u.second;
+        }
+        users_list.clear();
+    }
+    ~Server(){
+        delete users_list_file;
+        delete_users();
+        close(server_socket);
+    }
 };
 
 
@@ -235,16 +384,23 @@ public:
 
 
 
-
+Server* myserver = 0;
+void exit_app(int sig_num){
+    if (myserver)
+        delete myserver;
+    cout<<"\n---Server|bye---"<<endl;
+    exit(sig_num);
+}
 
 
 int main(){
     cout << "---Server-starting---\n";
-    Server myserver(10001);
-    myserver.start_listening();
-    myserver.start_accepting();
-
-
-    
+    myserver = new Server(10002);
+    signal(SIGINT, exit_app);
+    myserver->start_listening();
+    myserver->start_accepting();
+    exit_app(0);
     return 0;
 }
+
+// g++ 
